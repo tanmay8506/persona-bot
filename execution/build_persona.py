@@ -42,11 +42,13 @@ TARGET_ALIASES = [                  # all names this person appears under in cha
 OUTPUT_FILE  = get_absolute_path("persona_profile.json")
 
 CHAT_FILES = [
-    # (path, type)  — type is "whatsapp" or "html" or "json"
+    # (path, type)  — type is "whatsapp" or "html" or "json" or "transcript"
     (get_absolute_path("files/Atxt.txt"),       "whatsapp"),
     (get_absolute_path("files/Wapp.txt"),       "whatsapp"),
+    (get_absolute_path("files/A2.txt"),         "whatsapp"),
     (get_absolute_path("files/message_1.html"), "html"),
     (get_absolute_path("files/message_2.html"), "html"),
+    (get_absolute_path("files/chat_transcript.txt"), "transcript"),
 ]
 
 MAX_SAME_RESPONSE   = 3    # max times same response kept (dedup)
@@ -270,6 +272,44 @@ def parse_json(path: str) -> list[dict]:
         print(f"  ⚠️  JSON parse error on {path}: {e}")
         
     return parsed_messages
+
+
+def parse_transcript(path: str) -> list[dict]:
+    """
+    Parses hand-compiled chat logs matching:
+      Sender (Time): Message
+      e.g., Anvesha (7:53 PM): Aaram se
+    """
+    parsed_messages = []
+    # Match: Name (time): Message
+    pat = re.compile(r"^([^(\n]+)\s*\(([^)]+)\):\s*(.+)")
+    with open(path, encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line_str = line.strip()
+            # Ignore section dividers or blank lines
+            if line_str.startswith("---") or line_str.startswith("===") or not line_str:
+                continue
+                
+            m = pat.match(line_str)
+            if m:
+                sender = m.group(1).strip()
+                time_str = m.group(2).strip()
+                body = m.group(3).strip()
+                
+                # Parse timestamp
+                try:
+                    dt = datetime.strptime(time_str, "%I:%M %p")
+                except ValueError:
+                    dt = datetime.now()
+                    
+                body = mask_pii(body)
+                parsed_messages.append({
+                    "timestamp": dt,
+                    "sender": sender,
+                    "text": body
+                })
+    return parsed_messages
+
 
 # ── PII Masker ────────────────────────────────────────────────────────────────
 
@@ -563,6 +603,8 @@ def main():
                 msgs = parse_html(path)
             elif ftype == "json":
                 msgs = parse_json(path)
+            elif ftype == "transcript":
+                msgs = parse_transcript(path)
             else:
                 continue
             print(f"  ✅  {path}: {len(msgs)} messages")

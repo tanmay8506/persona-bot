@@ -22,7 +22,8 @@ from api.llm import (
     call_groq_with_retry,
     is_repeat,
     is_bad_response,
-    clean_response
+    clean_response,
+    detect_tone
 )
 
 load_dotenv()
@@ -178,18 +179,55 @@ def send_chat_message(data: ChatRequest):
     # 3. Save User message to Database immediately
     save_message(convo_id, "user", message)
     
-    # 4. Fetch semantic few-shots (biased by language/dead zones)
-    few_shots = retrieve_few_shots(profile_name, message, limit=6)
+    # 4. Fetch semantic few-shots (context-aware transition RAG)
+    # Check if message is a short dead zone filler word to preserve raw sample fallback
+    import re
+    clean = re.sub(r'[^\w\s]', '', message.lower()).strip()
+    words = set(clean.split())
+    dead_zone_words = {
+        "ok","okay","k","hm","hmm","what","why","how","hi","hey","hello","bye",
+        "yes","no","sure","fine","nice","good","bad","lol","haha","omg","really",
+        "oh","ah","ugh","bro","man","dude","wait","stop","go","come","see",
+    }
+    is_dz = len(words) <= 2 and words.issubset(dead_zone_words)
+    
+    retrieval_query = message
+    if not is_dz:
+        last_assistant_content = ""
+        for h in reversed(formatted_history):
+            if h["role"] == "assistant":
+                last_assistant_content = h["content"]
+                break
+        if last_assistant_content:
+            last_line = last_assistant_content.split("\n")[-1].strip()
+            retrieval_query = f"{last_line} -> {message}"
+            
+    few_shots = retrieve_few_shots(profile_name, retrieval_query, limit=6)
     
     # 5. Assemble Prompt layers
     prompt_msgs = assemble_prompt(message, formatted_history, profile, few_shots, config=data.config.dict() if data.config else None)
     
+    # Calculate custom parameters based on live config
+    temp_override = None
+    freq_override = None
+    pres_override = None
+    if data.config:
+        temp_override = 0.72 + (data.config.elongation_rate * 0.25)
+        freq_override = 0.25 + (data.config.elongation_rate * 0.45)
+        pres_override = 0.15 + (data.config.intimacy * 0.4)
+
     # 6. Generate reply with retry logic
     # Tweak Groq variety based on elongation slider (higher elongation -> higher variety/temperature)
     force_variety = False
     if data.config and data.config.elongation_rate > 0.7:
         force_variety = True
-    reply = call_groq_with_retry(prompt_msgs, force_variety=force_variety)
+    reply = call_groq_with_retry(
+        prompt_msgs, 
+        force_variety=force_variety, 
+        temp=temp_override, 
+        freq_penalty=freq_override, 
+        pres_penalty=pres_override
+    )
     
     # 7. Safeguard 1: AI Bleed-through Filter Retry
     if is_bad_response(reply):
@@ -197,7 +235,12 @@ def send_chat_message(data: ChatRequest):
             "role": "system",
             "content": f"Stay in character as {profile_name}. Do not output AI metadata, disclaimers, or introductory headings. Just text back."
         }]
-        reply = call_groq_with_retry(retry_prompt)
+        reply = call_groq_with_retry(
+            retry_prompt, 
+            temp=temp_override, 
+            freq_penalty=freq_override, 
+            pres_penalty=pres_override
+        )
         
     # 8. Safeguard 2: Repetition / Streak Blocker Retry
     if is_repeat(reply, formatted_history):
@@ -205,7 +248,13 @@ def send_chat_message(data: ChatRequest):
             "role": "system",
             "content": "Say something different this time. You are repeating the same phrasing as before."
         }]
-        reply = call_groq_with_retry(variety_prompt, force_variety=True)
+        reply = call_groq_with_retry(
+            variety_prompt, 
+            force_variety=True, 
+            temp=temp_override, 
+            freq_penalty=freq_override, 
+            pres_penalty=pres_override
+        )
         
     # 9. Clean up final response text
     reply = clean_response(reply)
@@ -213,4 +262,7 @@ def send_chat_message(data: ChatRequest):
     # 10. Save Assistant reply to Database
     save_message(convo_id, "assistant", reply)
     
-    return {"role": "assistant", "content": reply}
+    # Detect tone/vibe for UI presentation
+    tone = detect_tone(message, formatted_history)
+    
+    return {"role": "assistant", "content": reply, "vibe": tone}

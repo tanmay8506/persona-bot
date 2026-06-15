@@ -170,11 +170,11 @@ TONE_PATTERNS = {
 }
 
 TONE_HINTS = {
-    "emotional": "They're going through something emotional. Respond with genuine care, ask what happened, acknowledge their feelings. Don't brush it off.",
-    "excited": "They're excited. Match that energy — be enthusiastic back.",
-    "humor":   "They're being funny or joking around. Play along, banter back.",
-    "question": "They asked you something specific. Actually answer it in your texting style.",
-    "planning": "They're talking about meeting up or making plans. Respond naturally to that.",
+    "emotional": "Tanmay is sharing something emotional, sad, or vulnerable. Support him informally in Hinglish (e.g., 'Aaram se', 'Chill kr bs', 'koi na yrr', 'tu thik h na?'). Do NOT use formal language or sound like an AI therapist. Be a warm, casual, close friend.",
+    "excited": "Tanmay is excited. Match his high energy! Banter back with enthusiasm, using phrases like 'Bhaiiiii crazzzyyyy', 'Yesss', 'sachii?!' and happy emojis (😂, 🥳).",
+    "humor": "Tanmay is joking or teasing. Play along, pull his leg, and banter back. Use funny slangs like 'Lol cap cap cap', 'XDD', 'chup kr chutiye', 'mara jayega tu', or '😂😂'.",
+    "question": "Tanmay asked a question. Answer it directly but CASUALLY in your custom style. NEVER use trailing periods or capitalized sentences (e.g., 'nhi yrr mai toh so rhi thi').",
+    "planning": "Tanmay wants to meet up or make plans. Coordinate naturally and informally (e.g., 'haan chal milte hai', 'kab aana h', 'metro se chalenge').",
 }
 
 def detect_tone(message: str, history: list[dict]) -> str:
@@ -302,22 +302,35 @@ def is_repeat(new_reply: str, history: list[dict]) -> bool:
 
 # ── Groq API Calling with Retry Backoff ────────────────────────────────────────
 
-def call_groq_with_retry(messages: list[dict], max_retries: int = 3, force_variety: bool = False) -> str:
-    """Call Groq API with exponential backoff retry on 429 Rate Limits."""
+def call_groq_with_retry(
+    messages: list[dict], 
+    max_retries: int = 3, 
+    force_variety: bool = False,
+    temp: float = None,
+    freq_penalty: float = None,
+    pres_penalty: float = None
+) -> str:
+    """Call Groq API with exponential backoff retry on 429 Rate Limits with dynamic parameters."""
     client = get_groq_client()
     
     # Increase temperature on streak-blocker variety re-runs
-    temp = 0.95 if force_variety else 0.84
+    if temp is None:
+        temp_val = 0.95 if force_variety else 0.84
+    else:
+        temp_val = min(1.0, temp + 0.1) if force_variety else temp
+        
+    freq_val = 0.5 if freq_penalty is None else freq_penalty
+    pres_val = 0.35 if pres_penalty is None else pres_penalty
     
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
                 model=GROQ_MODEL_ID,
                 messages=messages,
-                temperature=temp,
+                temperature=temp_val,
                 max_tokens=150,
-                frequency_penalty=0.5,
-                presence_penalty=0.35,
+                frequency_penalty=freq_val,
+                presence_penalty=pres_val,
             )
             return response.choices[0].message.content.strip()
             

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react"
-import { Send, LogOut, Loader2, Settings } from "lucide-react"
+import { Send, LogOut, Loader2, Settings, Copy, Check } from "lucide-react"
 
 interface Message {
   role: "user" | "assistant"
@@ -7,55 +7,94 @@ interface Message {
   id?: string
 }
 
-// Helper to render message content with burst bubbles (defined outside to prevent recreate and typing lag)
-const renderMessageContent = (msg: Message, index: number) => {
+interface MessageBubbleProps {
+  msg: Message
+  index: number
+}
+
+const MessageBubble = ({ msg, index }: MessageBubbleProps) => {
+  const [copied, setCopied] = useState(false)
   const isUser = msg.role === "user"
-  
-  // User messages do not burst (they are sent as single messages)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(msg.content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   if (isUser) {
     return (
-      <div key={index} className="flex justify-end mb-4">
-        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-purple-600 text-white text-[15px] font-normal leading-relaxed rounded-tr-sm shadow-md">
-          {msg.content}
+      <div key={index} className="flex justify-end mb-4 animate-fade-in-up">
+        <div className="group relative max-w-[75%]">
+          <div className="px-4 py-2.5 rounded-2xl bg-purple-600 text-white text-[15px] font-normal leading-relaxed rounded-tr-sm shadow-md">
+            {msg.content}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="absolute -left-8 top-1/2 -translate-y-1/2 p-1.5 rounded bg-charcoal-800/90 text-gray-400 hover:text-white border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer shadow-sm"
+            title="Copy text"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </div>
     )
   }
 
-  // Assistant/Clone responses can burst split by newlines (\n)
   const lines = msg.content.split("\n").filter((l) => l.trim() !== "")
   
-  // If it's a single line, render normally
   if (lines.length <= 1) {
     return (
-      <div key={index} className="flex justify-start mb-4">
-        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed rounded-tl-sm shadow-md border border-white/5">
-          {msg.content}
+      <div key={index} className="flex justify-start mb-4 animate-fade-in-up">
+        <div className="group relative max-w-[75%]">
+          <div className="px-4 py-2.5 rounded-2xl bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed rounded-tl-sm shadow-md border border-white/5">
+            {msg.content}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 rounded bg-charcoal-800/90 text-gray-400 hover:text-white border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer shadow-sm"
+            title="Copy text"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </div>
     )
   }
 
-  // For multi-line responses, render burst bubbles
   return (
-    <div key={index} className="flex flex-col items-start gap-1 mb-4">
-      {lines.map((line, lineIdx) => {
-        const isFirst = lineIdx === 0
-        const isLast = lineIdx === lines.length - 1
-        
-        return (
-          <div
-            key={lineIdx}
-            className={`max-w-[75%] px-4 py-2.5 bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed shadow-md border border-white/5 transition-all duration-300
-              ${isFirst ? "rounded-t-2xl rounded-r-2xl rounded-bl-md rounded-tl-sm" : ""}
-              ${!isFirst && !isLast ? "rounded-r-2xl rounded-l-md" : ""}
-              ${isLast ? "rounded-b-2xl rounded-l-md rounded-tr-md" : ""}
-            `}
-          >
-            {line}
-          </div>
-        )
-      })}
+    <div key={index} className="flex flex-col items-start gap-1 mb-4 animate-fade-in-up">
+      <div className="group relative max-w-[75%]">
+        <div className="flex flex-col items-start gap-1">
+          {lines.map((line, lineIdx) => {
+            const isFirst = lineIdx === 0
+            const isLast = lineIdx === lines.length - 1
+            
+            return (
+              <div
+                key={lineIdx}
+                className={`px-4 py-2.5 bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed shadow-md border border-white/5 transition-all duration-300
+                  ${isFirst ? "rounded-t-2xl rounded-r-2xl rounded-bl-md rounded-tl-sm" : ""}
+                  ${!isFirst && !isLast ? "rounded-r-2xl rounded-l-md" : ""}
+                  ${isLast ? "rounded-b-2xl rounded-l-md rounded-tr-md" : ""}
+                `}
+              >
+                {line}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 rounded bg-charcoal-800/90 text-gray-400 hover:text-white border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer shadow-sm"
+          title="Copy text"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+      </div>
     </div>
   )
 }
@@ -78,13 +117,14 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
   const [elongationRate, setElongationRate] = useState(0.5)
   const [burstiness, setBurstiness] = useState(0.5)
   const [intimacy, setIntimacy] = useState(0.8) // Default to high intimacy to enforce tu/tere/tujhe
+  const [currentVibe, setCurrentVibe] = useState("")
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Memoize rendered messages to avoid re-evaluating on every typing keystroke (prevents typing lag / INP issues)
   const renderedMessages = useMemo(() => {
-    return messages.map((msg, index) => renderMessageContent(msg, index))
+    return messages.map((msg, index) => <MessageBubble key={index} msg={msg} index={index} />)
   }, [messages])
 
   // Auto-scroll to bottom of conversation
@@ -166,7 +206,10 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
 
       if (res.status === 200) {
         const data = await res.json()
-        setMessages((prev) => [...prev, data])
+        setMessages((prev) => [...prev, { role: data.role, content: data.content }])
+        if (data.vibe) {
+          setCurrentVibe(data.vibe)
+        }
       } else {
         const errData = await res.json().catch(() => ({}))
         setError(errData.detail || "API returned an error. Try again.")
@@ -199,9 +242,21 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
           </div>
           <div>
             <h3 className="font-semibold text-white leading-tight">{profileName}</h3>
-            <span className="text-xs text-green-400 flex items-center gap-1.5 font-medium mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Active Clone
-            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-green-400 flex items-center gap-1 font-medium bg-green-950/30 border border-green-500/20 px-1.5 py-0.5 rounded-full">
+                <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" /> active
+              </span>
+              {currentVibe && (
+                <span className="text-[10px] bg-purple-950/40 border border-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-medium tracking-wide">
+                  {currentVibe === "emotional" && "❤️ emotional"}
+                  {currentVibe === "excited" && "🥳 excited"}
+                  {currentVibe === "humor" && "🤪 banter"}
+                  {currentVibe === "question" && "🧐 answering"}
+                  {currentVibe === "planning" && "📅 planning"}
+                  {currentVibe === "casual" && "💬 casual"}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -229,8 +284,8 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
             ⚙️ Tonal Tuning Controls
           </h4>
           <div className="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="flex justify-between text-gray-400 mb-1">
+            <div className="flex flex-col gap-1">
+              <label className="flex justify-between text-gray-400 mb-0.5">
                 <span>Hinglish Mix</span>
                 <span className="font-mono text-purple-400">{Math.round(hinglishRatio * 100)}%</span>
               </label>
@@ -243,10 +298,13 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
                 onChange={(e) => setHinglishRatio(parseFloat(e.target.value))}
                 className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
+              <span className="text-[9px] text-gray-500 leading-none">
+                {hinglishRatio < 0.3 ? "Mostly English" : hinglishRatio < 0.7 ? "Natural Mix" : "Heavy Hinglish"}
+              </span>
             </div>
             
-            <div>
-              <label className="flex justify-between text-gray-400 mb-1">
+            <div className="flex flex-col gap-1">
+              <label className="flex justify-between text-gray-400 mb-0.5">
                 <span>Intimacy (Tu-Tad)</span>
                 <span className="font-mono text-purple-400">{Math.round(intimacy * 100)}%</span>
               </label>
@@ -259,10 +317,13 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
                 onChange={(e) => setIntimacy(parseFloat(e.target.value))}
                 className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
+              <span className="text-[9px] text-gray-500 leading-none">
+                {intimacy < 0.3 ? "Casual/Interchangeable" : intimacy < 0.75 ? "Strict 'Tu' & 'Tere'" : "High Closeness"}
+              </span>
             </div>
 
-            <div>
-              <label className="flex justify-between text-gray-400 mb-1">
+            <div className="flex flex-col gap-1">
+              <label className="flex justify-between text-gray-400 mb-0.5">
                 <span>Word Elongation</span>
                 <span className="font-mono text-purple-400">{Math.round(elongationRate * 100)}%</span>
               </label>
@@ -275,10 +336,13 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
                 onChange={(e) => setElongationRate(parseFloat(e.target.value))}
                 className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
+              <span className="text-[9px] text-gray-500 leading-none">
+                {elongationRate < 0.3 ? "Standard Spelling" : elongationRate < 0.7 ? "Occasional Stretching" : "Heavy Stretching (yaaarr)"}
+              </span>
             </div>
 
-            <div>
-              <label className="flex justify-between text-gray-400 mb-1">
+            <div className="flex flex-col gap-1">
+              <label className="flex justify-between text-gray-400 mb-0.5">
                 <span>Text Bursting</span>
                 <span className="font-mono text-purple-400">{Math.round(burstiness * 100)}%</span>
               </label>
@@ -291,6 +355,9 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
                 onChange={(e) => setBurstiness(parseFloat(e.target.value))}
                 className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
+              <span className="text-[9px] text-gray-500 leading-none">
+                {burstiness < 0.3 ? "Single-line replies" : burstiness < 0.7 ? "Moderate splits" : "Heavy burst splits"}
+              </span>
             </div>
           </div>
           <div className="mt-4 flex justify-end">
