@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+/.next/
+/out/
+
+# Python cache / virtual envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+.env
+
+# Raw Chat Files (Private Data)
+files/
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+.tmp/
+.vscode/
+.idea/
+*.log
