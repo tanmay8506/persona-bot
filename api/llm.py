@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL_ID = os.getenv("GROQ_MODEL_ID", "llama-3.3-70b-specdec")
+GROQ_MODEL_ID = os.getenv("GROQ_MODEL_ID", "llama-3.3-70b-versatile")
 
 # Initialize client
 def get_groq_client():
