@@ -80,6 +80,7 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
   const [intimacy, setIntimacy] = useState(0.8) // Default to high intimacy to enforce tu/tere/tujhe
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Memoize rendered messages to avoid re-evaluating on every typing keystroke (prevents typing lag / INP issues)
   const renderedMessages = useMemo(() => {
@@ -90,6 +91,16 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, loading])
+
+  // Focus input field on mount and whenever loading finishes to avoid manual click refocusing
+  useEffect(() => {
+    if (!loading && !initializing) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, initializing])
 
   // Initialize Conversation Session on mount
   useEffect(() => {
@@ -330,6 +341,7 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
       {/* Input area */}
       <form onSubmit={handleSend} className="p-4 bg-charcoal-900/60 border-t border-white/5 flex gap-2 items-center z-10">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
