@@ -125,9 +125,11 @@ def main():
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates" # postgrest upsert
     }
+    # Ensure raw_samples is saved inside the style column in Supabase
+    style_with_samples = {**style, "raw_samples": profile.get("raw_samples", [])}
     profile_payload = {
         "name": name,
-        "style": style
+        "style": style_with_samples
     }
     
     try:

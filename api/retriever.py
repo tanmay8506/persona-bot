@@ -98,15 +98,22 @@ def retrieve_few_shots(profile_name: str, query: str, limit: int = 3) -> list[di
     if len(words) <= 2 and words.issubset(dead_zone_words):
         # Retrieve short samples from profile style data as fallbacks
         p = get_profile(profile_name)
-        if p and "raw_samples" in p["style"]:
+        raw_samples = []
+        if p:
+            if "raw_samples" in p:
+                raw_samples = p["raw_samples"]
+            elif "style" in p and "raw_samples" in p["style"]:
+                raw_samples = p["style"]["raw_samples"]
+                
+        if raw_samples:
             # Pick a few random raw samples of short lengths
             import random
-            short_samples = [s for s in p["style"]["raw_samples"] if len(s.split()) <= 4]
+            short_samples = [s for s in raw_samples if len(s.split()) <= 4]
             if not short_samples:
-                short_samples = p["style"]["raw_samples"]
+                short_samples = raw_samples
             samples = random.sample(short_samples, min(limit, len(short_samples)))
-            # Format like matched pairs
-            return [{"context": "...", "response": s} for s in samples]
+            # Format like matched pairs using keys expected by llm.py (ctx and resp)
+            return [{"ctx": "...", "resp": s} for s in samples]
             
     # Otherwise run semantic retrieval
     matches = semantic_retrieve(profile_name, query, limit)

@@ -1,10 +1,63 @@
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useMemo } from "react"
 import { Send, LogOut, Loader2 } from "lucide-react"
 
 interface Message {
   role: "user" | "assistant"
   content: string
   id?: string
+}
+
+// Helper to render message content with burst bubbles (defined outside to prevent recreate and typing lag)
+const renderMessageContent = (msg: Message, index: number) => {
+  const isUser = msg.role === "user"
+  
+  // User messages do not burst (they are sent as single messages)
+  if (isUser) {
+    return (
+      <div key={index} className="flex justify-end mb-4">
+        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-purple-600 text-white text-[15px] font-normal leading-relaxed rounded-tr-sm shadow-md">
+          {msg.content}
+        </div>
+      </div>
+    )
+  }
+
+  // Assistant/Clone responses can burst split by newlines (\n)
+  const lines = msg.content.split("\n").filter((l) => l.trim() !== "")
+  
+  // If it's a single line, render normally
+  if (lines.length <= 1) {
+    return (
+      <div key={index} className="flex justify-start mb-4">
+        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed rounded-tl-sm shadow-md border border-white/5">
+          {msg.content}
+        </div>
+      </div>
+    )
+  }
+
+  // For multi-line responses, render burst bubbles
+  return (
+    <div key={index} className="flex flex-col items-start gap-1 mb-4">
+      {lines.map((line, lineIdx) => {
+        const isFirst = lineIdx === 0
+        const isLast = lineIdx === lines.length - 1
+        
+        return (
+          <div
+            key={lineIdx}
+            className={`max-w-[75%] px-4 py-2.5 bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed shadow-md border border-white/5 transition-all duration-300
+              ${isFirst ? "rounded-t-2xl rounded-r-2xl rounded-bl-md rounded-tl-sm" : ""}
+              ${!isFirst && !isLast ? "rounded-r-2xl rounded-l-md" : ""}
+              ${isLast ? "rounded-b-2xl rounded-l-md rounded-tr-md" : ""}
+            `}
+          >
+            {line}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 interface ChatWindowProps {
@@ -22,6 +75,11 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
   const [error, setError] = useState("")
 
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Memoize rendered messages to avoid re-evaluating on every typing keystroke (prevents typing lag / INP issues)
+  const renderedMessages = useMemo(() => {
+    return messages.map((msg, index) => renderMessageContent(msg, index))
+  }, [messages])
 
   // Auto-scroll to bottom of conversation
   useEffect(() => {
@@ -98,58 +156,7 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
     }
   }
 
-  // Helper to render message content with burst bubbles
-  const renderMessageContent = (msg: Message, index: number) => {
-    const isUser = msg.role === "user"
-    
-    // User messages do not burst (they are sent as single messages)
-    if (isUser) {
-      return (
-        <div key={index} className="flex justify-end mb-4">
-          <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-purple-600 text-white text-[15px] font-normal leading-relaxed rounded-tr-sm shadow-md">
-            {msg.content}
-          </div>
-        </div>
-      )
-    }
 
-    // Assistant/Clone responses can burst split by newlines (\n)
-    const lines = msg.content.split("\n").filter((l) => l.trim() !== "")
-    
-    // If it's a single line, render normally
-    if (lines.length <= 1) {
-      return (
-        <div key={index} className="flex justify-start mb-4">
-          <div className="max-w-[75%] px-4 py-2.5 rounded-2xl bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed rounded-tl-sm shadow-md border border-white/5">
-            {msg.content}
-          </div>
-        </div>
-      )
-    }
-
-    // For multi-line responses, render burst bubbles
-    return (
-      <div key={index} className="flex flex-col items-start gap-1 mb-4">
-        {lines.map((line, lineIdx) => {
-          const isFirst = lineIdx === 0
-          const isLast = lineIdx === lines.length - 1
-          
-          return (
-            <div
-              key={lineIdx}
-              className={`max-w-[75%] px-4 py-2.5 bg-charcoal-700 text-gray-100 text-[15px] font-normal leading-relaxed shadow-md border border-white/5 transition-all duration-300
-                ${isFirst ? "rounded-t-2xl rounded-r-2xl rounded-bl-md rounded-tl-sm" : ""}
-                ${!isFirst && !isLast ? "rounded-r-2xl rounded-l-md" : ""}
-                ${isLast ? "rounded-b-2xl rounded-l-md rounded-tr-md" : ""}
-              `}
-            >
-              {line}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
 
   if (initializing) {
     return (
@@ -198,7 +205,7 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
           </div>
         )}
 
-        {messages.map((msg, index) => renderMessageContent(msg, index))}
+        {renderedMessages}
 
         {loading && (
           <div className="flex justify-start mb-4">
