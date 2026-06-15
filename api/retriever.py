@@ -75,7 +75,82 @@ def semantic_retrieve(profile_name: str, query: str, limit: int = 3) -> list[dic
     return []
 
 
-def retrieve_few_shots(profile_name: str, query: str, limit: int = 3) -> list[dict]:
+def keyword_retrieve(profile_name: str, query: str, limit: int = 3) -> list[dict]:
+    """Retrieve matched context-response pairs using exact keyword matching in PostgreSQL."""
+    import re
+    words = re.findall(r"[a-zA-Z0-9']+", query.lower())
+    
+    # Common English & Hinglish stopwords to ignore
+    stopwords = {
+        "the","and","for","you","but","was","with","that","this","are","have",
+        "not","from","they","will","been","what","when","who","how","him",
+        "her","his","she","he","we","our","your","just","nhi","toh","to",
+        "mai","kya","rhi","it","bhi","hu","like","ki","tha","thi","se",
+        "rha","kuch","tu","kr","haan","hai","me","woh","hain","mujhe","ka",
+        "so","aur","am","is","don't","abhi","of","in","ko","be","it's",
+        "ho","bol","yeh","kyu","aar","rha","rhi","tha","thi"
+    }
+    
+    keywords = [w for w in words if w not in stopwords and len(w) >= 3]
+    if not keywords:
+        return []
+        
+    # Take the top 2 longest keywords for stability and speed
+    keywords = sorted(keywords, key=len, reverse=True)[:2]
+    
+    results = []
+    from api.database import get_supabase_rest_url, get_headers
+    
+    headers = get_headers()
+    for kw in keywords:
+        # Construct an ilike query for both context and response
+        url = f"{get_supabase_rest_url('pairs')}?profile_name=eq.{profile_name}&or=(context.ilike.%{kw}%,response.ilike.%{kw}%)&limit={limit}"
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                res = client.get(url, headers=headers)
+                if res.status_code == 200:
+                    for item in res.json():
+                        results.append({
+                            "ctx": item["context"],
+                            "resp": item["response"]
+                        })
+        except Exception as e:
+            print(f"Keyword search error for '{kw}': {e}")
+            
+    return results
+
+
+def hybrid_retrieve(profile_name: str, query: str, limit: int = 6) -> list[dict]:
+    """Retrieve context-response pairs combining exact keyword matching with semantic matching."""
+    # 1. Fetch exact keyword matches (prioritised)
+    kw_matches = keyword_retrieve(profile_name, query, limit=3)
+    
+    # 2. Fetch semantic matches
+    sem_matches = semantic_retrieve(profile_name, query, limit=limit)
+    
+    # Map sem_matches structure from Supabase RPC output keys (context/response) to (ctx/resp)
+    formatted_sem = [{"ctx": m["context"], "resp": m["response"]} for m in sem_matches]
+    
+    # 3. Merge matches while preventing exact duplicates
+    seen = set()
+    merged = []
+    
+    for m in kw_matches:
+        key = m["ctx"].strip() + "||" + m["resp"].strip()
+        if key not in seen:
+            seen.add(key)
+            merged.append(m)
+            
+    for m in formatted_sem:
+        key = m["ctx"].strip() + "||" + m["resp"].strip()
+        if key not in seen:
+            seen.add(key)
+            merged.append(m)
+            
+    return merged[:limit]
+
+
+def retrieve_few_shots(profile_name: str, query: str, limit: int = 6) -> list[dict]:
     """
     Retrieves the best few-shot context-response pairs.
     Bypasses vector search for short 'dead zone' filler inputs, returning diverse
@@ -115,7 +190,5 @@ def retrieve_few_shots(profile_name: str, query: str, limit: int = 3) -> list[di
             # Format like matched pairs using keys expected by llm.py (ctx and resp)
             return [{"ctx": "...", "resp": s} for s in samples]
             
-    # Otherwise run semantic retrieval
-    matches = semantic_retrieve(profile_name, query, limit)
-    # Map key names from 'response'/'context' in pgvector function output
-    return [{"ctx": m["context"], "resp": m["response"]} for m in matches]
+    # Otherwise run hybrid retrieval (semantic + keyword)
+    return hybrid_retrieve(profile_name, query, limit)

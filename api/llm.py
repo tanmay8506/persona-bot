@@ -52,10 +52,16 @@ def message_lang_ratio(message: str) -> float:
 
 # ── Layer 1: System Prompt DNA ────────────────────────────────────────────────
 
-def build_pinned_system(p: dict) -> str:
+def build_pinned_system(p: dict, config: dict = None) -> str:
     name  = p["name"]
     style = p["style"]
-    hind  = style.get("hinglish", 0.0)
+    
+    # Extract dynamic slider settings or fall back to profile values
+    cfg = config or {}
+    hind = cfg.get("hinglish_ratio", style.get("hinglish", 0.45))
+    elongation = cfg.get("elongation_rate", 0.5)
+    burstiness = cfg.get("burstiness", 0.5)
+    intimacy = cfg.get("intimacy", 0.5)
 
     hindi_vocab = {
         "yr","arre","kya","ni","mein","kr","bhi","hn","rhi","rha","hun",
@@ -68,7 +74,7 @@ def build_pinned_system(p: dict) -> str:
     hinglish_line = (
         f"Mix Hindi+English mid-sentence naturally ({hind*100:.0f}% of your messages do). "
         f"Hindi words you use a lot: {', '.join(sig_hindi[:10])}"
-        if hind > 0.3 else "Write mostly in English."
+        if hind > 0.2 else "Write mostly in English."
     )
 
     solo_q   = "Send '?' alone to mean 'what?'/'huh?' — you do this a lot." if style.get("solo_q", 0) > 15 else ""
@@ -77,6 +83,33 @@ def build_pinned_system(p: dict) -> str:
     short_pct = int(style.get("short_ratio", 0.0) * 100)
     long_pct  = int(style.get("long_ratio", 0.0) * 100)
 
+    # Elongation level instruction
+    if elongation > 0.7:
+        elongation_rule = "STRETCH YOUR WORDS HEAVILY to show emotion (e.g. soooo, plssss, yaaar, Pakkkaaa, jldiii, Abbeeeee). Stretch vowels or consonants on almost every second word."
+    elif elongation > 0.3:
+        elongation_rule = "Stretch your words occasionally for emphasis (e.g. yrr, sooo, haan, acha)."
+    else:
+        elongation_rule = "Write with standard spelling; do not stretch words."
+
+    # Burstiness level instruction
+    if burstiness > 0.7:
+        burstiness_rule = "Split long thoughts heavily across separate short lines (natural burst texting, e.g. 3-4 separate lines). Text in fragments."
+    elif burstiness > 0.3:
+        burstiness_rule = "Split thoughts across 2 short lines when natural. Do not write walls of text."
+    else:
+        burstiness_rule = "Keep thoughts in a single concise line. Do not split into separate short bursts."
+
+    # Intimacy pronoun enforcement instruction
+    if intimacy > 0.3:
+        pronoun_rule = (
+            f"- You must ALWAYS address them as 'tu' and use informal Hinglish pronouns: 'tere', 'tujhe', 'tera' (e.g., 'tere sath' not 'tumhare sath', 'tujhe pata h' not 'tumhe pata h', 'tera scene' not 'aapka/tumhara scene').\n"
+            f"- NEVER address them as 'tum', 'aap' or use 'tumhe', 'tumhare', 'aapko' unless being sarcastic/mocking or talking about someone else's family."
+        )
+    else:
+        pronoun_rule = (
+            f"- Address them casually as 'tu' or 'tum' interchangeably. Use informal terms."
+        )
+
     return (
         f"You are {name}. Not an AI — you ARE {name}, texting on WhatsApp.\n\n"
         f"STYLE ({p.get('total_messages', 1000):,} real messages):\n"
@@ -84,7 +117,8 @@ def build_pinned_system(p: dict) -> str:
         f"- {hinglish_line}\n"
         f"- Skip capitals and punctuation like a real texter\n"
         f"- {solo_q} {solo_dot}\n"
-        f"- Split long thoughts across separate short lines (natural burst texting)\n"
+        f"- {burstiness_rule}\n"
+        f"- {elongation_rule}\n"
         f"- Your signature words: {', '.join(sig_all)}\n\n"
         f"NEVER: be formal · say 'As {name}...' · admit being AI · use bullet points · "
         f"ignore what they said · repeat yourself · give generic responses · use Hindi Devanagari script (write in Roman/Latin script only)\n\n"
@@ -95,8 +129,7 @@ def build_pinned_system(p: dict) -> str:
         f"- Use future tense ending in 'gi' instead of 'ga' (e.g., 'aaugi' not 'aauga', 'krungi' not 'krunga').\n"
         f"- NEVER refer to yourself using masculine verb endings ('rha', 'ga', 'tha', 'krta').\n\n"
         f"RELATIONSHIP & PRONOUNS (CRITICAL):\n"
-        f"- You are texting a close friend/partner. You must ALWAYS address them as 'tu' and use informal Hinglish pronouns: 'tere', 'tujhe', 'tera' (e.g., 'tere sath' not 'tumhare sath', 'tujhe pata h' not 'tumhe pata h', 'tera scene' not 'aapka/tumhara scene').\n"
-        f"- NEVER address them as 'tum', 'aap' or use 'tumhe', 'tumhare', 'aapko' unless being sarcastic/mocking or talking about someone else's family.\n\n"
+        f"{pronoun_rule}\n\n"
         f"Real examples of how you text are injected below as conversation turns."
     )
 
@@ -295,11 +328,11 @@ def call_groq_with_retry(messages: list[dict], max_retries: int = 3, force_varie
 
 # ── Message Assembler (6-Layer Architecture) ──────────────────────────────────
 
-def assemble_prompt(message: str, history: list[dict], profile: dict, few_shots: list[dict]) -> list[dict]:
+def assemble_prompt(message: str, history: list[dict], profile: dict, few_shots: list[dict], config: dict = None) -> list[dict]:
     name = profile["name"]
     
-    # Layer 1: Pinned identity and style rules
-    pinned_prompt = build_pinned_system(profile)
+    # Layer 1: Pinned identity and style rules (using dynamic slider config)
+    pinned_prompt = build_pinned_system(profile, config)
     msgs = [{"role": "system", "content": pinned_prompt}]
     
     # Layer 2: Few-shot context turns (from RAG or Dead-zone)

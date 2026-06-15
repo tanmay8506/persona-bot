@@ -63,9 +63,16 @@ async def verify_passcode(authorization: str = Header(None)):
 class ConversationCreate(BaseModel):
     profile_name: str
 
+class PersonaConfig(BaseModel):
+    hinglish_ratio: float = 0.45
+    elongation_rate: float = 0.5
+    burstiness: float = 0.5
+    intimacy: float = 0.5
+
 class ChatRequest(BaseModel):
     conversation_id: str
     message: str
+    config: PersonaConfig = PersonaConfig()
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -172,13 +179,17 @@ def send_chat_message(data: ChatRequest):
     save_message(convo_id, "user", message)
     
     # 4. Fetch semantic few-shots (biased by language/dead zones)
-    few_shots = retrieve_few_shots(profile_name, message, limit=3)
+    few_shots = retrieve_few_shots(profile_name, message, limit=6)
     
     # 5. Assemble Prompt layers
-    prompt_msgs = assemble_prompt(message, formatted_history, profile, few_shots)
+    prompt_msgs = assemble_prompt(message, formatted_history, profile, few_shots, config=data.config.dict() if data.config else None)
     
     # 6. Generate reply with retry logic
-    reply = call_groq_with_retry(prompt_msgs)
+    # Tweak Groq variety based on elongation slider (higher elongation -> higher variety/temperature)
+    force_variety = False
+    if data.config and data.config.elongation_rate > 0.7:
+        force_variety = True
+    reply = call_groq_with_retry(prompt_msgs, force_variety=force_variety)
     
     # 7. Safeguard 1: AI Bleed-through Filter Retry
     if is_bad_response(reply):

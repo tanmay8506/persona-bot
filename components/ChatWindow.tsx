@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react"
-import { Send, LogOut, Loader2 } from "lucide-react"
+import { Send, LogOut, Loader2, Settings } from "lucide-react"
 
 interface Message {
   role: "user" | "assistant"
@@ -73,6 +73,11 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
   const [conversationId, setConversationId] = useState("")
   const [initializing, setInitializing] = useState(true)
   const [error, setError] = useState("")
+  const [showSettings, setShowSettings] = useState(false)
+  const [hinglishRatio, setHinglishRatio] = useState(0.45)
+  const [elongationRate, setElongationRate] = useState(0.5)
+  const [burstiness, setBurstiness] = useState(0.5)
+  const [intimacy, setIntimacy] = useState(0.8) // Default to high intimacy to enforce tu/tere/tujhe
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -139,6 +144,12 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
         body: JSON.stringify({
           conversation_id: conversationId,
           message: msg,
+          config: {
+            hinglish_ratio: hinglishRatio,
+            elongation_rate: elongationRate,
+            burstiness: burstiness,
+            intimacy: intimacy,
+          }
         }),
       })
 
@@ -182,14 +193,105 @@ export default function ChatWindow({ profileName, passcode, onBack }: ChatWindow
             </span>
           </div>
         </div>
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 text-gray-400 hover:text-white transition"
-          title="Exit Session"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-2 rounded-lg hover:bg-white/5 active:bg-white/10 transition ${showSettings ? "text-purple-400" : "text-gray-400 hover:text-white"}`}
+            title="Tweak Persona settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onBack}
+            className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 text-gray-400 hover:text-white transition"
+            title="Exit Session"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
       </div>
+
+      {/* Settings Control Panel */}
+      {showSettings && (
+        <div className="absolute top-[73px] left-0 right-0 bg-[#121214]/95 border-b border-white/5 p-5 z-20 shadow-xl backdrop-blur-md transition-all duration-300">
+          <h4 className="text-white text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-1.5">
+            ⚙️ Tonal Tuning Controls
+          </h4>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="flex justify-between text-gray-400 mb-1">
+                <span>Hinglish Mix</span>
+                <span className="font-mono text-purple-400">{Math.round(hinglishRatio * 100)}%</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={hinglishRatio}
+                onChange={(e) => setHinglishRatio(parseFloat(e.target.value))}
+                className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+            </div>
+            
+            <div>
+              <label className="flex justify-between text-gray-400 mb-1">
+                <span>Intimacy (Tu-Tad)</span>
+                <span className="font-mono text-purple-400">{Math.round(intimacy * 100)}%</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={intimacy}
+                onChange={(e) => setIntimacy(parseFloat(e.target.value))}
+                className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="flex justify-between text-gray-400 mb-1">
+                <span>Word Elongation</span>
+                <span className="font-mono text-purple-400">{Math.round(elongationRate * 100)}%</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={elongationRate}
+                onChange={(e) => setElongationRate(parseFloat(e.target.value))}
+                className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="flex justify-between text-gray-400 mb-1">
+                <span>Text Bursting</span>
+                <span className="font-mono text-purple-400">{Math.round(burstiness * 100)}%</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={burstiness}
+                onChange={(e) => setBurstiness(parseFloat(e.target.value))}
+                className="w-full h-1 bg-purple-950 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="px-3 py-1 rounded bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-medium text-[11px] transition shadow"
+            >
+              Apply & Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 p-6 overflow-y-auto space-y-2 relative bg-charcoal-900/30">
