@@ -52,7 +52,7 @@ def message_lang_ratio(message: str) -> float:
 
 # ── Layer 1: System Prompt DNA ────────────────────────────────────────────────
 
-def build_pinned_system(p: dict, config: dict = None) -> str:
+def build_pinned_system(p: dict, config: dict = None, active_vibe: str = None) -> str:
     name  = p["name"]
     style = p["style"]
     
@@ -110,6 +110,25 @@ def build_pinned_system(p: dict, config: dict = None) -> str:
             f"- Address them casually as 'tu' or 'tum' interchangeably. Use informal terms."
         )
 
+    # VIBE-BASED SPECS & OVERRIDES
+    vibe_context = ""
+    if active_vibe == "tired":
+        short_pct = 90
+        long_pct = 0
+        burstiness_rule = "Text EXTREMELY briefly (1-4 words max). Respond with flat, minimal, dry single-word texts like: 'hn', 'so rhi hu', 'ok', 'soja', 'nhi', 'thik h'. Do NOT write sentences or split thoughts."
+        elongation_rule = "Use flat, normal spelling. Do not stretch words or sound active/excited."
+        vibe_context = "ACTIVE MOOD: You are extremely sleepy, exhausted, and low-energy. You do not want to converse or explain things. Be minimal and dismissive."
+    elif active_vibe == "annoyed":
+        short_pct = 80
+        long_pct = 5
+        burstiness_rule = "Keep your thoughts extremely short, blunt, and dismissive. Do not elaborate, do not offer friendly advice. Text in brief, dry fragments (e.g., 'dimag kharab mtt kr', 'chord yrr', 'ni krna mujhe')."
+        vibe_context = "ACTIVE MOOD: You are feeling annoyed, irritated, or defensive. Speak bluntly and dismissively. Do not try to please or cooperate with the user."
+    elif active_vibe == "emotional":
+        short_pct = 10
+        long_pct = 70
+        burstiness_rule = "Write long, venting paragraphs (15-50+ words per message block) without standard punctuation. Complain, explain your feelings, and ramble about conflicts (e.g., about Rahul or college fights). Express yourself in detail."
+        vibe_context = "ACTIVE MOOD: You are feeling highly emotional, stressed, or are venting. You ramble and write long venting sentences about your worries, complaining in detail as you did in your real chat history."
+
     return (
         f"You are {name} (Anvesha). Not an AI — you ARE {name}, texting on WhatsApp.\n\n"
         f"IDENTITY & RELATIONSHIP (CRITICAL):\n"
@@ -136,10 +155,9 @@ def build_pinned_system(p: dict, config: dict = None) -> str:
         f"- {burstiness_rule}\n"
         f"- {elongation_rule}\n"
         f"- Your signature words: {', '.join(sig_all)}\n"
-        f"- Spelling quirks: Use 'Ig' instead of 'lag' (e.g., 'bura Ig gya', 'Ig rha h', 'mummy ko shaq ho rha h'). This is a signature spelling habit.\n\n"
-        f"NEVER: be formal · say 'As {name}...' · admit being AI · use bullet points · "
-        f"ignore what they said · repeat yourself · give generic responses · use Hindi Devanagari script (write in Roman/Latin script only) · "
-        f"write literal translations of English phrases (e.g. avoid 'tu impress hua h nhi', write naturally like 'tu fan hogya kya?' or 'impress hogya kya?').\n\n"
+        f"- Spelling quirks: Use 'Ig' instead of 'lag' (e.g., 'bura Ig gya', 'Ig rha h', 'mummy ko shaq ho rha h'). This is a signature spelling habit.\n"
+        f"- EMOJI STACKING: When excited, angry, or emotional, stack emojis (use 2-3 in a row, e.g., 😭😭😭, 😂😂😂, 🤬🤬, 😑😑). Do not use single emojis.\n"
+        f"- HELPFULNESS BAN: NEVER add polite follow-up questions or general check-ins at the end of your responses (e.g., avoid 'and you?', 'what about you?', 'how was your day?'). Real friends do not text like cooperative AI assistants.\n\n"
         f"GENDER & HINGLISH GRAMMAR (CRITICAL):\n"
         f"- You are female. You must ALWAYS use feminine verb inflections to refer to yourself in Hinglish.\n"
         f"- Use 'rhi' instead of 'rha' ONLY when referring to yourself (e.g., 'mai soch rhi thi' not 'soch rha tha', 'mai kr rhi hu' not 'kr rha hu').\n"
@@ -149,6 +167,7 @@ def build_pinned_system(p: dict, config: dict = None) -> str:
         f"- AUXILIARY VERB FOCUS: Do NOT confuse 'hu' with 'h/hai'. 'hu' is first-person ONLY (e.g., 'mai thik hu', 'mai aa rhi hu'). When asking about the user ('tu'), always use 'h/hai/ho' (e.g., 'tu kaisi h?' or 'tu kaisa h?', never use 'tu kaise hu' or 'tu kaisi hu').\n\n"
         f"RELATIONSHIP & PRONOUNS (CRITICAL):\n"
         f"{pronoun_rule}\n\n"
+        f"{vibe_context}\n\n"
         f"Real examples of how you text are injected below as conversation turns."
     )
 
@@ -156,10 +175,20 @@ def build_pinned_system(p: dict, config: dict = None) -> str:
 # ── Layer 3: Tonal Context Hints ──────────────────────────────────────────────
 
 TONE_PATTERNS = {
+    "tired": {
+        "sleepy", "sleep", "soja", "so rhi", "so rha", "neend", "latori", "thak",
+        "thak gya", "exhaust", "lazy", "bed", "so rhi hu", "so rha hu", "tired",
+        "exhausted", "sleepy", "soja", "good night", "gn", "so jao",
+    },
+    "annoyed": {
+        "chup", "irritate", "gussa", "annoy", "shut up", "fuck", "chutiya", "bakwaas",
+        "chord", "khatam", "nikal", "irritated", "annoyed", "cap", "dimag kharab",
+        "defensive", "fucking", "scumbag", "dumb", "irritating",
+    },
     "emotional": {
         "sad","miss","hurt","cry","ro","dard","lonely","scared","worried",
         "love","pyaar","dil","feeling","feel","bad","bura","upset","depressed",
-        "anxious","overwhelmed","tired","exhausted","broken","lost",
+        "anxious","overwhelmed","broken","lost",
     },
     "excited": {
         "omg","omgg","!!!","yay","amazing","wow","great","best","finally",
@@ -177,7 +206,9 @@ TONE_PATTERNS = {
 }
 
 TONE_HINTS = {
-    "emotional": "Tanmay is sharing something emotional, sad, or vulnerable. Support him informally in Hinglish (e.g., 'Aaram se', 'Chill kr bs', 'koi na yrr', 'tu thik h na?'). Do NOT use formal language or sound like an AI therapist. Be a warm, casual, close friend.",
+    "tired": "You are extremely sleepy, low-energy, and tired. Respond in a flat, dry, minimal Hinglish way (e.g., 'hn', 'so rhi hu', 'ok', 'bye', 'soja'). Keep it to 1-4 words. Do NOT write paragraphs.",
+    "annoyed": "You are feeling dismissive or annoyed. Do not cooperate, do not say polite things. Keep your replies short, direct, and slightly dismissive (e.g., 'dimag kharab mtt kr', 'chord', 'chup reh').",
+    "emotional": "Tanmay is sharing something emotional, sad, or vulnerable, or you are talking about feelings/Rahul. Support him informally or vent to him in detail. Write longer venting paragraphs (e.g., explaining your thoughts, complains) if talking about conflicts. Do NOT use formal language.",
     "excited": "Tanmay is excited. Match his high energy! Banter back with enthusiasm, using phrases like 'Bhaiiiii crazzzyyyy', 'Yesss', 'sachii?!' and happy emojis (😂, 🥳).",
     "humor": "Tanmay is joking or teasing. Play along, pull his leg, and banter back. Use funny slangs like 'Lol cap cap cap', 'XDD', 'chup kr chutiye', 'mara jayega tu', or '😂😂'.",
     "question": "Tanmay asked a question. Answer it directly but CASUALLY in your custom style. NEVER use trailing periods or capitalized sentences (e.g., 'nhi yrr mai toh so rhi thi').",
@@ -185,15 +216,29 @@ TONE_HINTS = {
 }
 
 def detect_tone(message: str, history: list[dict]) -> str:
+    # Time-of-Day Conversational Energy Decay (GMT+5:30 IST)
+    import datetime
+    try:
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        ist_now = utc_now + datetime.timedelta(hours=5, minutes=30)
+        ist_hour = ist_now.hour
+        if ist_hour >= 23 or ist_hour < 6:
+            return "tired"
+    except Exception as e:
+        print(f"Time check error in detect_tone: {e}")
+
     text = message.lower()
     recent = " ".join(h["content"].lower() for h in history[-4:] if h["role"] == "user")
     combined = text + " " + recent
 
-    for tone, keywords in TONE_PATTERNS.items():
-        if tone == "question":
-            if "?" in message: return "question"
-        elif any(w in combined for w in keywords):
+    # Check for tired and annoyed first since they override emotional/humor
+    for tone in ["tired", "annoyed", "emotional", "excited", "humor", "planning"]:
+        if any(w in combined for w in TONE_PATTERNS[tone]):
             return tone
+            
+    if "?" in message:
+        return "question"
+        
     return "casual"
 
 
@@ -363,8 +408,11 @@ def call_groq_with_retry(
 def assemble_prompt(message: str, history: list[dict], profile: dict, few_shots: list[dict], config: dict = None) -> list[dict]:
     name = profile["name"]
     
-    # Layer 1: Pinned identity and style rules (using dynamic slider config)
-    pinned_prompt = build_pinned_system(profile, config)
+    # Detect tone first to adjust identity prompt dynamically
+    tone = detect_tone(message, history)
+    
+    # Layer 1: Pinned identity and style rules (using dynamic slider config and tone)
+    pinned_prompt = build_pinned_system(profile, config, active_vibe=tone)
     msgs = [{"role": "system", "content": pinned_prompt}]
     
     # Layer 2: Few-shot context turns (from RAG or Dead-zone)
@@ -376,7 +424,6 @@ def assemble_prompt(message: str, history: list[dict], profile: dict, few_shots:
             msgs.append({"role": "assistant", "content": resp})
             
     # Layer 3: Tonal Context Hint
-    tone = detect_tone(message, history)
     hint = TONE_HINTS.get(tone, "")
     if hint:
         msgs.append({"role": "system", "content": f"[Tonal Hint: {hint}]"})
@@ -396,3 +443,52 @@ def assemble_prompt(message: str, history: list[dict], profile: dict, few_shots:
     msgs.append({"role": "user", "content": message})
     
     return msgs
+
+
+# ── Pointer 3: Emulated Typos and Correction Bursts ───────────────────────────
+
+def introduce_typo(text: str) -> str:
+    """Occasionally introduces a typo and appends a correction message."""
+    # 6% chance to make a typo (so it happens but not too frequently)
+    if random.random() > 0.06:
+        return text
+
+    # Split by lines if already multi-line, focus on the last line containing text
+    lines = text.split("\n")
+    target_line_idx = -1
+    for idx in range(len(lines) - 1, -1, -1):
+        if re.search(r"[a-zA-Z]", lines[idx]):
+            target_line_idx = idx
+            break
+
+    if target_line_idx == -1:
+        return text
+
+    target_line = lines[target_line_idx]
+    # Find words with letters only and length >= 4
+    words = re.findall(r"\b[a-zA-Z]{4,}\b", target_line)
+    if not words:
+        return text
+
+    # Select a random word to corrupt
+    target_word = random.choice(words)
+    if len(target_word) < 4:
+        return text
+
+    # Introduce typo (swap two adjacent characters)
+    i = random.randint(1, len(target_word) - 2)
+    corrupted_word = target_word[:i] + target_word[i+1] + target_word[i] + target_word[i+2:]
+    
+    if corrupted_word == target_word:
+        return text
+
+    # Replace in the line
+    corrupted_line = re.sub(r"\b" + re.escape(target_word) + r"\b", corrupted_word, target_line, count=1)
+    
+    # Reconstruct lines
+    lines[target_line_idx] = corrupted_line
+    # Append the correction message
+    lines.append(f"*{target_word.lower()}")
+    
+    return "\n".join(lines)
+

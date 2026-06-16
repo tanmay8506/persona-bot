@@ -42,13 +42,16 @@ To ensure seamless one-click deployment on **Vercel** with zero-latency cold sta
 *   **Fast Vector Indexing:** Set up an HNSW (Hierarchical Navigable Small World) index on the vector embeddings column to guarantee sub-second vector search times, keeping the serverless response time far below Vercel's 10-second timeout boundary.
 
 ### Phase 4: Prompt Engineering & LLM Orchestration (Priority 3)
-*   **Dynamic System Prompting:** Inject the extracted "Style DNA Card" directly into the system instructions to enforce writing styles (e.g., lowercase only, emoji constraints).
-*   **Few-Shot Copycat Injection:** For every incoming user message:
+*   **Dynamic System Prompting:** Inject the extracted "Style DNA Card" directly into the system instructions. Automatically override style settings based on detected vibe (e.g., venting emotional paragraphs vs. tired, short Hinglish replies).
+*   **Dynamic Pacing & Mood Engine:** Analyze conversation mood and adjust Groq hyperparameters on the fly (Emotional venting boosts temperature to 0.95 and presence penalty to 0.6; Tired/Annoyed drops temperature to 0.72 and presence penalty to 0.1 for flat, minimal responses).
+*   **Few-Shot Copycat Injection with Guardrails:** For every incoming user message:
     1. Check for "dead zone" filler messages (e.g., "ok", "lol") to avoid repetitive retrieval.
-    2. Search the database using `pgvector` cosine similarity to find the top 3 most contextually relevant past turns.
-    3. Inject these real-life turns directly into the prompt as few-shot examples.
+    2. Search the database using `pgvector` cosine similarity to find contextually relevant past turns.
+    3. Filter out any RAG results with cosine similarity score below `0.45` to prevent out-of-context semantic drifts.
+    4. Inject these real-life turns directly into the prompt as few-shot examples.
+*   **Strict Polite-AI Ban:** Explicitly instruct the model to never generate polite or helpful follow-up questions at the end of responses.
 *   **Temporal Awareness Context:** Dynamically inject the active local timestamp, day of the week, and date into the context of every user-assistant turn to align LLM behaviors with current time realities.
-*   **Groq Inference:** Call Groq Llama 3.3 70B model with a balanced temperature (0.85) and frequency/presence penalties to prevent repetitive styling.
+*   **Groq Inference:** Call Groq Llama 3.3 70B model with dynamically adjusted parameters (temperature, frequency/presence penalties) based on active tone.
 
 ### Phase 5: Frontend Interface (Presentation Layer)
 *   **Setup Tab:** Interface to paste API keys, input target names, and upload chat files.

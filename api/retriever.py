@@ -57,7 +57,7 @@ def semantic_retrieve(profile_name: str, query: str, limit: int = 3) -> list[dic
     
     payload = {
         "query_embedding": query_vector,
-        "match_threshold": 0.35, # Cosine similarity threshold
+        "match_threshold": 0.45, # Cosine similarity threshold (raised from 0.35 to avoid drift)
         "match_count": limit,
         "p_profile_name": profile_name
     }

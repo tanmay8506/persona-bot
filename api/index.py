@@ -23,7 +23,9 @@ from api.llm import (
     is_repeat,
     is_bad_response,
     clean_response,
-    detect_tone
+    detect_tone,
+    introduce_typo,
+    build_pinned_system
 )
 
 load_dotenv()
@@ -204,10 +206,13 @@ def send_chat_message(data: ChatRequest):
             
     few_shots = retrieve_few_shots(profile_name, retrieval_query, limit=6)
     
+    # Detect tone/vibe
+    tone = detect_tone(message, formatted_history)
+
     # 5. Assemble Prompt layers
     prompt_msgs = assemble_prompt(message, formatted_history, profile, few_shots, config=data.config.dict() if data.config else None)
     
-    # Calculate custom parameters based on live config
+    # Calculate custom parameters based on live config and tone
     temp_override = None
     freq_override = None
     pres_override = None
@@ -215,6 +220,17 @@ def send_chat_message(data: ChatRequest):
         temp_override = 0.72 + (data.config.elongation_rate * 0.25)
         freq_override = 0.25 + (data.config.elongation_rate * 0.45)
         pres_override = 0.15 + (data.config.intimacy * 0.4)
+        
+    # Tone-based overrides for Groq hyperparameters
+    if tone == "emotional":
+        temp_override = 0.95 if temp_override is None else min(1.0, temp_override + 0.1)
+        pres_override = 0.6 if pres_override is None else min(1.0, pres_override + 0.25)
+    elif tone == "tired":
+        temp_override = 0.72 if temp_override is None else max(0.5, temp_override - 0.15)
+        pres_override = 0.1 if pres_override is None else max(0.0, pres_override - 0.2)
+    elif tone == "annoyed":
+        temp_override = 0.78 if temp_override is None else max(0.6, temp_override - 0.1)
+        pres_override = 0.15 if pres_override is None else max(0.0, pres_override - 0.15)
 
     # 6. Generate reply with retry logic
     # Tweak Groq variety based on elongation slider (higher elongation -> higher variety/temperature)
@@ -259,10 +275,106 @@ def send_chat_message(data: ChatRequest):
     # 9. Clean up final response text
     reply = clean_response(reply)
     
+    # Apply Pointer 3: Emulated Typos and Correction Bursts
+    reply = introduce_typo(reply)
+    
     # 10. Save Assistant reply to Database
     save_message(convo_id, "assistant", reply)
     
-    # Detect tone/vibe for UI presentation
-    tone = detect_tone(message, formatted_history)
-    
     return {"role": "assistant", "content": reply, "vibe": tone}
+
+
+# ── Pointer 4: Reactive Opening Cron Helpers & Endpoint ───────────────────────
+
+def parse_supabase_time(time_str: str) -> datetime.datetime:
+    import datetime
+    # Remove Z suffix if present
+    clean_str = time_str.replace("Z", "")
+    # Split by + offset if present
+    clean_str = clean_str.split("+")[0]
+    # Split subseconds if present
+    clean_str = clean_str.split(".")[0]
+    return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+
+
+@app.get("/api/cron/reactive_open")
+def cron_reactive_open(x_vercel_cron: str = Header(None)):
+    """Vercel cron endpoint called periodically to trigger reactive openers on idle chats."""
+    import datetime
+    import httpx
+    
+    # Verify header if VERCEL environment is set
+    if os.getenv("VERCEL") and x_vercel_cron != "1":
+        raise HTTPException(status_code=401, detail="Unauthorized cron trigger.")
+
+    headers = get_headers()
+    convos_url = f"{get_supabase_rest_url('conversations')}?select=id,profile_name"
+    triggered = []
+
+    try:
+        with httpx.Client() as client:
+            res = client.get(convos_url, headers=headers)
+            if res.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch conversations: {res.text}")
+            
+            conversations = res.json()
+            for c in conversations:
+                convo_id = c["id"]
+                profile_name = c["profile_name"]
+                
+                # Fetch last message in this conversation
+                msg_url = f"{get_supabase_rest_url('messages')}?conversation_id=eq.{convo_id}&order=created_at.desc&limit=1"
+                m_res = client.get(msg_url, headers=headers)
+                if m_res.status_code == 200:
+                    messages = m_res.json()
+                    if not messages:
+                        continue
+                    
+                    last_msg = messages[0]
+                    # Parse timestamp using clean parsing utility
+                    last_time = parse_supabase_time(last_msg["created_at"])
+                    now_utc = datetime.datetime.now(datetime.timezone.utc)
+                    gap_hours = (now_utc - last_time).total_seconds() / 3600.0
+                    
+                    # Only trigger if the user sent the last message and the gap is > 18 hours
+                    if gap_hours > 18.0 and last_msg["role"] == "user":
+                        # Generate reactive opener
+                        # Fetch conversation history (last 8 messages)
+                        hist_url = f"{get_supabase_rest_url('messages')}?conversation_id=eq.{convo_id}&order=created_at.asc&limit=8"
+                        h_res = client.get(hist_url, headers=headers)
+                        history = []
+                        if h_res.status_code == 200:
+                            for h in h_res.json():
+                                history.append({
+                                    "role": "assistant" if h["role"] == "assistant" else "user",
+                                    "content": h["content"]
+                                })
+                        
+                        # Fetch profile style
+                        profile = get_profile(profile_name)
+                        if not profile:
+                            continue
+                            
+                        # Build system instructions
+                        pinned_prompt = build_pinned_system(profile, active_vibe="casual")
+                        
+                        prompt_msgs = [
+                            {"role": "system", "content": pinned_prompt},
+                            {"role": "system", "content": "[Context: You haven't texted Tanmay in 18+ hours. You are initiating a conversation out of the blue. Write a short, casual starting text in Hinglish like 'kya kr rha h?', 'sunnn', or tease him based on the last conversation topic. Do NOT reply to his last question or repeat yourself. Keep it under 6 words, lowercase only, no punctuation.]"}
+                        ]
+                        
+                        for h in history:
+                            prompt_msgs.append({"role": h["role"], "content": h["content"]})
+                            
+                        reply = call_groq_with_retry(prompt_msgs, temp=0.85, pres_penalty=0.4)
+                        reply = clean_response(reply)
+                        
+                        if reply and not reply.startswith("⚠️"):
+                            save_message(convo_id, "assistant", reply)
+                            triggered.append({"convo_id": convo_id, "message": reply})
+                            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "ok", "triggered": triggered}
+
