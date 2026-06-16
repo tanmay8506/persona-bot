@@ -25,7 +25,8 @@ from api.llm import (
     clean_response,
     detect_tone,
     introduce_typo,
-    build_pinned_system
+    build_pinned_system,
+    fix_gender_slips
 )
 
 load_dotenv()
@@ -275,6 +276,9 @@ def send_chat_message(data: ChatRequest):
     # 9. Clean up final response text
     reply = clean_response(reply)
     
+    # Correct Hinglish first-person gender slips (masculine endings)
+    reply = fix_gender_slips(reply)
+    
     # Apply Pointer 3: Emulated Typos and Correction Bursts
     reply = introduce_typo(reply)
     
@@ -368,6 +372,7 @@ def cron_reactive_open(x_vercel_cron: str = Header(None)):
                             
                         reply = call_groq_with_retry(prompt_msgs, temp=0.85, pres_penalty=0.4)
                         reply = clean_response(reply)
+                        reply = fix_gender_slips(reply)
                         
                         if reply and not reply.startswith("⚠️"):
                             save_message(convo_id, "assistant", reply)
