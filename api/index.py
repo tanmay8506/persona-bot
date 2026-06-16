@@ -218,19 +218,19 @@ def send_chat_message(data: ChatRequest):
     freq_override = None
     pres_override = None
     if data.config:
-        temp_override = 0.72 + (data.config.elongation_rate * 0.25)
+        temp_override = 0.65 + (data.config.elongation_rate * 0.20)
         freq_override = 0.25 + (data.config.elongation_rate * 0.45)
         pres_override = 0.15 + (data.config.intimacy * 0.4)
         
     # Tone-based overrides for Groq hyperparameters
     if tone == "emotional":
-        temp_override = 0.95 if temp_override is None else min(1.0, temp_override + 0.1)
+        temp_override = 0.88 if temp_override is None else min(1.0, temp_override + 0.06)
         pres_override = 0.6 if pres_override is None else min(1.0, pres_override + 0.25)
     elif tone == "tired":
-        temp_override = 0.72 if temp_override is None else max(0.5, temp_override - 0.15)
+        temp_override = 0.62 if temp_override is None else max(0.5, temp_override - 0.12)
         pres_override = 0.1 if pres_override is None else max(0.0, pres_override - 0.2)
     elif tone == "annoyed":
-        temp_override = 0.78 if temp_override is None else max(0.6, temp_override - 0.1)
+        temp_override = 0.70 if temp_override is None else max(0.6, temp_override - 0.08)
         pres_override = 0.15 if pres_override is None else max(0.0, pres_override - 0.15)
 
     # 6. Generate reply with retry logic
