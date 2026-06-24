@@ -121,10 +121,11 @@ def main():
     profile_url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/profiles"
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates" # postgrest upsert
     }
+    if not SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
     # Ensure raw_samples is saved inside the style column in Supabase
     style_with_samples = {**style, "raw_samples": profile.get("raw_samples", [])}
     profile_payload = {

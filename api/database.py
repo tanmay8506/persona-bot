@@ -15,11 +15,13 @@ ACCESS_PASSCODE           = os.getenv("ACCESS_PASSCODE", "")
 def get_headers() -> dict:
     if not SUPABASE_SERVICE_ROLE_KEY:
         raise ValueError("SUPABASE_SERVICE_ROLE_KEY not configured in environment variables.")
-    return {
+    headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json"
     }
+    if not SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
+    return headers
 
 def get_supabase_rest_url(table: str) -> str:
     if not SUPABASE_URL:

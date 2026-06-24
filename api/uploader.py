@@ -331,10 +331,11 @@ def upload_processed_persona(profile_data: dict, owner_hash: str) -> bool:
     
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates"
     }
+    if not SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
     
     # 1. Upsert Profile
     profile_url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/profiles"
