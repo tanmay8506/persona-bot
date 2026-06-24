@@ -416,7 +416,7 @@ def cron_reactive_open(x_vercel_cron: str = Header(None)):
 
 @app.post("/api/upload_chat")
 async def upload_chat(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     name: str = Form(...),
     aliases: str = Form(""),
     owner_hash: str = Depends(verify_passcode)
@@ -430,11 +430,14 @@ async def upload_chat(
         
     alias_list = [a.strip() for a in aliases.split(",") if a.strip()]
     
-    try:
-        content = await file.read()
-        content_str = content.decode("utf-8", errors="ignore")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+    files_data = []
+    for file in files:
+        try:
+            content = await file.read()
+            content_str = content.decode("utf-8", errors="ignore")
+            files_data.append((content_str, file.filename))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read file '{file.filename}': {str(e)}")
         
     # Check if profile already exists and check ownership (bypass owner filter for check)
     existing_profile = get_profile(target_name)
@@ -449,16 +452,16 @@ async def upload_chat(
         if not is_owner:
             raise HTTPException(status_code=403, detail="Persona name already taken. Please choose a different name.")
             
-    from api.uploader import process_file_data, upload_processed_persona
+    from api.uploader import process_multiple_files_data, upload_processed_persona
     try:
-        profile_data = process_file_data(content_str, file.filename, target_name, alias_list)
+        profile_data = process_multiple_files_data(files_data, target_name, alias_list)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse chat data: {str(e)}")
         
     if not profile_data["pairs"]:
         raise HTTPException(
             status_code=400, 
-            detail="No valid chat turns could be parsed from the file. Make sure the file format is supported and aliases/name are correct."
+            detail="No valid chat turns could be parsed from the files. Make sure the file formats are supported and aliases/name are correct."
         )
         
     try:

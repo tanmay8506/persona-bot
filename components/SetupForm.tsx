@@ -16,7 +16,7 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
 
   // Upload States
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [newName, setNewName] = useState("")
   const [newAliases, setNewAliases] = useState("")
   const [uploading, setUploading] = useState(false)
@@ -83,8 +83,8 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!uploadFile) {
-      setError("Please select a chat file to upload.")
+    if (uploadFiles.length === 0) {
+      setError("Please select one or more chat files to upload.")
       return
     }
     if (!newName.trim()) {
@@ -96,7 +96,9 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
     setUploadSuccess("")
 
     const formData = new FormData()
-    formData.append("file", uploadFile)
+    uploadFiles.forEach(file => {
+      formData.append("files", file)
+    })
     formData.append("name", newName.trim())
     formData.append("aliases", newAliases.trim())
 
@@ -114,7 +116,7 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
         setUploadSuccess(result.message || "Persona uploaded successfully!")
         setNewName("")
         setNewAliases("")
-        setUploadFile(null)
+        setUploadFiles([])
         await validateAndFetch(passcode.trim())
       } else {
         const err = await res.json().catch(() => ({}))
@@ -247,60 +249,63 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                    Chat File
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept=".txt,.json,.html,.htm"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          setUploadFile(e.target.files[0])
-                        }
-                      }}
-                      className="hidden"
-                      id="chat-file-upload"
-                    />
-                    <label
-                      htmlFor="chat-file-upload"
-                      className="w-full px-4 py-2 rounded-lg glass-input text-gray-300 hover:text-white text-xs border border-dashed border-white/20 hover:border-purple-500/50 cursor-pointer flex items-center justify-center gap-2 transition bg-white/5"
-                    >
-                      <Upload className="w-4 h-4 text-purple-400" />
-                      {uploadFile ? uploadFile.name : "Select WhatsApp / Instagram file"}
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                      Chat File(s)
                     </label>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".txt,.json,.html,.htm"
+                        multiple
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            setUploadFiles(Array.from(e.target.files))
+                          }
+                        }}
+                        className="hidden"
+                        id="chat-file-upload"
+                      />
+                      <label
+                        htmlFor="chat-file-upload"
+                        className="w-full px-4 py-2 rounded-lg glass-input text-gray-300 hover:text-white text-xs border border-dashed border-white/20 hover:border-purple-500/50 cursor-pointer flex items-center justify-center gap-2 transition bg-white/5"
+                      >
+                        <Upload className="w-4 h-4 text-purple-400" />
+                        {uploadFiles.length > 0
+                          ? `${uploadFiles.length} file(s) selected`
+                          : "Select WhatsApp / Instagram file(s)"}
+                      </label>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                    Target Persona Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rahul"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg glass-input text-white focus:ring-1 focus:ring-purple-500"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                      Target Persona Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Tanmay"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg glass-input text-white focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                    Aliases in chat file (comma separated)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rahul Sharma, rahul_sharma"
-                    value={newAliases}
-                    onChange={(e) => setNewAliases(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg glass-input text-white focus:ring-1 focus:ring-purple-500"
-                    title="Aliases used by the person in the export file (to filter their replies)"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    Helps filter who is who. Exclude your own name.
-                  </p>
-                </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                      Aliases in chat file (comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Tanmay Sharma, tanmay_sharma"
+                      value={newAliases}
+                      onChange={(e) => setNewAliases(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg glass-input text-white focus:ring-1 focus:ring-purple-500"
+                      title="Aliases used by the person in the export file (to filter their replies)"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Helps filter who is who. Exclude your own name.
+                    </p>
+                  </div>
 
                 <button
                   type="submit"
@@ -322,6 +327,7 @@ export default function SetupForm({ onSuccess }: SetupFormProps) {
                 setShowUpload(false)
                 setError("")
                 setUploadSuccess("")
+                setUploadFiles([])
               }}
               className="text-xs text-purple-400 hover:text-purple-300 underline"
             >

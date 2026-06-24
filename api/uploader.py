@@ -192,15 +192,7 @@ def info_score(pair: dict) -> int:
     if "\n" in pair["resp"] and pair["resp"].count("\n") >= 2: score += 10
     return score
 
-def process_file_data(content: str, filename: str, target_name: str, aliases: list[str]) -> dict:
-    lower_fn = filename.lower()
-    if lower_fn.endswith(".json"):
-        msgs = parse_json_content(content)
-    elif lower_fn.endswith(".html") or lower_fn.endswith(".htm"):
-        msgs = parse_html_content(content)
-    else:
-        msgs = parse_whatsapp_content(content)
-        
+def process_messages_to_persona(msgs: list[dict], target_name: str, aliases: list[str]) -> dict:
     msgs.sort(key=lambda x: x["timestamp"])
     merged = []
     for m in msgs:
@@ -297,6 +289,33 @@ def process_file_data(content: str, filename: str, target_name: str, aliases: li
         "pairs": final_pairs,
         "raw_samples": raw_samples
     }
+
+
+def process_file_data(content: str, filename: str, target_name: str, aliases: list[str]) -> dict:
+    lower_fn = filename.lower()
+    if lower_fn.endswith(".json"):
+        msgs = parse_json_content(content)
+    elif lower_fn.endswith(".html") or lower_fn.endswith(".htm"):
+        msgs = parse_html_content(content)
+    else:
+        msgs = parse_whatsapp_content(content)
+        
+    return process_messages_to_persona(msgs, target_name, aliases)
+
+
+def process_multiple_files_data(files_data: list[tuple[str, str]], target_name: str, aliases: list[str]) -> dict:
+    all_msgs = []
+    for content, filename in files_data:
+        lower_fn = filename.lower()
+        if lower_fn.endswith(".json"):
+            msgs = parse_json_content(content)
+        elif lower_fn.endswith(".html") or lower_fn.endswith(".htm"):
+            msgs = parse_html_content(content)
+        else:
+            msgs = parse_whatsapp_content(content)
+        all_msgs.extend(msgs)
+        
+    return process_messages_to_persona(all_msgs, target_name, aliases)
 
 def embed_batch(texts: list[str]) -> list[list[float]] | None:
     url = "https://api.cohere.com/v1/embed"
