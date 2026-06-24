@@ -43,6 +43,20 @@ app.add_middleware(
 )
 
 
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": str(exc),
+            "traceback": traceback.format_exc()
+        }
+    )
+
+
 # ── Passcode Hashing and Verification Middleware ───────────────────────────────
 
 import hashlib
