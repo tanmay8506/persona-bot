@@ -26,6 +26,8 @@ pip-delete-this-directory.txt
 
 # Raw Chat Files (Private Data)
 files/
+persona_profile.json
+
 
 # Temporary / OS files
 .DS_Store

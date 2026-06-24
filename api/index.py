@@ -3,7 +3,7 @@ api/index.py — FastAPI serverless endpoints for Next.js monorepo routing.
 """
 
 import os
-from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi import FastAPI, Header, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -43,23 +43,33 @@ app.add_middleware(
 )
 
 
-# ── Passcode Verification Middleware ──────────────────────────────────────────
+# ── Passcode Hashing and Verification Middleware ───────────────────────────────
 
-async def verify_passcode(authorization: str = Header(None)):
-    """Verifies access passcode if ACCESS_PASSCODE is set in environments."""
-    if not ACCESS_PASSCODE:
-        return
-        
-    # Expect format "Bearer passcode"
+import hashlib
+
+def hash_passcode(passcode: str) -> str:
+    return hashlib.sha256(passcode.encode("utf-8")).hexdigest()
+
+ADMIN_PASSCODE = os.getenv("ACCESS_PASSCODE", "12345")
+ADMIN_HASH = hash_passcode(ADMIN_PASSCODE)
+
+async def verify_passcode(authorization: str = Header(None)) -> str:
+    """
+    Extracts the authorization token (passcode), hashes it, and returns the owner_hash.
+    If no passcode is provided, raises 401.
+    """
     token = ""
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
         
-    if token != ACCESS_PASSCODE:
+    token = token.strip()
+    if not token:
         raise HTTPException(
             status_code=401,
-            detail="Unauthorized. Invalid access passcode."
+            detail="Unauthorized. Passcode is required."
         )
+    return hash_passcode(token)
+
 
 
 # ── Request Models ────────────────────────────────────────────────────────────
@@ -86,13 +96,13 @@ def health_check():
     return {"status": "ok", "message": "Persona Bot API is running."}
 
 
-@app.get("/api/profiles", dependencies=[Depends(verify_passcode)])
-def list_profiles():
-    """Returns list of available personas in Supabase."""
-    profiles = get_profiles_list()
-    # If Supabase is empty, check if we have a local persona_profile.json
+@app.get("/api/profiles")
+def list_profiles(owner_hash: str = Depends(verify_passcode)):
+    """Returns list of available personas in Supabase filtered by owner."""
+    profiles = get_profiles_list(owner_hash, ADMIN_HASH)
+    # If Supabase is empty and user is admin, check if we have a local persona_profile.json
     # and upload it dynamically if found. This bootstraps first-time local setup.
-    if not profiles:
+    if not profiles and owner_hash == ADMIN_HASH:
         import json
         local_profile_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "persona_profile.json")
         if os.path.exists(local_profile_path):
@@ -107,17 +117,22 @@ def list_profiles():
     return profiles
 
 
-@app.post("/api/conversations", dependencies=[Depends(verify_passcode)])
-def start_chat(data: ConversationCreate):
+@app.post("/api/conversations")
+def start_chat(data: ConversationCreate, owner_hash: str = Depends(verify_passcode)):
     """Creates a persistent chat session in database."""
-    convo_id = create_conversation(data.profile_name)
+    # Verify profile ownership/access
+    profile = get_profile(data.profile_name, owner_hash, ADMIN_HASH)
+    if not profile:
+        raise HTTPException(status_code=403, detail="Access denied. You do not own this profile.")
+        
+    convo_id = create_conversation(data.profile_name, owner_hash)
     if not convo_id:
         raise HTTPException(status_code=500, detail="Failed to initialize conversation session.")
     return {"conversation_id": convo_id}
 
 
-@app.post("/api/chat", dependencies=[Depends(verify_passcode)])
-def send_chat_message(data: ChatRequest):
+@app.post("/api/chat")
+def send_chat_message(data: ChatRequest, owner_hash: str = Depends(verify_passcode)):
     """
     Main conversational loop.
     Assembles prompt, retrieve matched pairs, calls Groq, saves and returns message.
@@ -127,6 +142,19 @@ def send_chat_message(data: ChatRequest):
     
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
+        
+    # Verify caller owns this conversation session
+    from api.database import get_conversation_owner
+    convo_owner = get_conversation_owner(convo_id)
+    
+    is_owner = False
+    if owner_hash == ADMIN_HASH:
+        is_owner = (convo_owner == ADMIN_HASH or not convo_owner)
+    else:
+        is_owner = (convo_owner == owner_hash)
+        
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Access denied. You do not own this conversation.")
         
     # 1. Retrieve Conversation history (last 12 messages for full context)
     history = get_conversation_history(convo_id, limit=12)
@@ -152,15 +180,15 @@ def send_chat_message(data: ChatRequest):
             
     if not profile_name:
         # Default fallback (look at folders or assume first loaded profile name)
-        profiles = get_profiles_list()
+        profiles = get_profiles_list(owner_hash, ADMIN_HASH)
         if profiles:
             profile_name = profiles[0]["name"]
         else:
             profile_name = "Anvesha" # absolute hardcoded default
             
     # 2. Fetch profile card
-    profile = get_profile(profile_name)
-    if not profile:
+    profile = get_profile(profile_name, owner_hash, ADMIN_HASH)
+    if not profile and owner_hash == ADMIN_HASH:
         # Check if local profile receipt can bootstrap it
         import json
         local_profile_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "persona_profile.json")
@@ -382,4 +410,62 @@ def cron_reactive_open(x_vercel_cron: str = Header(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "ok", "triggered": triggered}
+
+
+@app.post("/api/upload_chat")
+async def upload_chat(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    aliases: str = Form(""),
+    owner_hash: str = Depends(verify_passcode)
+):
+    target_name = name.strip()
+    if not target_name:
+        raise HTTPException(status_code=400, detail="Persona name cannot be empty.")
+        
+    if target_name.lower() == "anvesha" and owner_hash != ADMIN_HASH:
+        raise HTTPException(status_code=403, detail="The name 'Anvesha' is reserved.")
+        
+    alias_list = [a.strip() for a in aliases.split(",") if a.strip()]
+    
+    try:
+        content = await file.read()
+        content_str = content.decode("utf-8", errors="ignore")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+        
+    # Check if profile already exists and check ownership (bypass owner filter for check)
+    existing_profile = get_profile(target_name)
+    if existing_profile:
+        existing_owner = existing_profile.get("owner")
+        is_owner = False
+        if owner_hash == ADMIN_HASH:
+            is_owner = (existing_owner == ADMIN_HASH or not existing_owner)
+        else:
+            is_owner = (existing_owner == owner_hash)
+            
+        if not is_owner:
+            raise HTTPException(status_code=403, detail="Persona name already taken. Please choose a different name.")
+            
+    from api.uploader import process_file_data, upload_processed_persona
+    try:
+        profile_data = process_file_data(content_str, file.filename, target_name, alias_list)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse chat data: {str(e)}")
+        
+    if not profile_data["pairs"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="No valid chat turns could be parsed from the file. Make sure the file format is supported and aliases/name are correct."
+        )
+        
+    try:
+        success = upload_processed_persona(profile_data, owner_hash)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to upload vectorized persona to database.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database upload error: {str(e)}")
+        
+    return {"status": "success", "message": f"Successfully created and vectorized persona '{target_name}' with {len(profile_data['pairs'])} pairs."}
+
 
