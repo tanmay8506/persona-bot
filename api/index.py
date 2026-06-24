@@ -3,6 +3,7 @@ api/index.py — FastAPI serverless endpoints for Next.js monorepo routing.
 """
 
 import os
+import datetime
 from fastapi import FastAPI, Header, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
